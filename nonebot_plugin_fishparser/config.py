@@ -16,7 +16,8 @@ class Config(BaseModel):
     # 是否允许用 yt-dlp 解析非 B 站站点（没装 yt-dlp 会自动跳过）
     fishparser_ytdlp: bool = Field(default=True, description="用 yt-dlp 兜底其它站点")
     # 推特中转：国内服务器直连 api.fxtwitter.com 会被 Cloudflare 拦。
-    # 填一个境外中转的前缀（会请求 <前缀><推文id>，返回 fxtwitter 同款 JSON），留空=直连
-    fishparser_tw_proxy: str = Field(default="", description="推特中转前缀，如 https://xxx.pages.dev/tw/")
+    # 填中转的**根地址**（插件会请求 <根>/tw/<推文id> 或 <根>/tco/<短码>，
+    # 中转返回 fxtwitter 同款 JSON），留空=直连
+    fishparser_tw_proxy: str = Field(default="", description="推特中转根地址，如 https://xxx.pages.dev")
     # 请求超时（秒）
     fishparser_timeout: float = Field(default=12.0, description="单次请求超时（秒）")

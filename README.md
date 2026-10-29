@@ -15,10 +15,13 @@
 | 抖音 / 小红书 / 快手 / 微博 / 油管 / A站 … | [yt-dlp](https://github.com/yt-dlp/yt-dlp) | 可选依赖，装了才启用；只取元数据不下载 |
 
 > **国内服务器注意（实测腾讯云）**：`x.com`、`pbs.twimg.com`、`video.twimg.com` 全部直连超时，
-> `api.fxtwitter.com` 会被 Cloudflare 挑战（`cf-mitigated: challenge`）。
-> 想在国内机器上稳定解析推特，需要在墙外放一个**中转**（Cloudflare Worker 20 行就够），
-> 然后填 `FISHPARSER_TW_PROXY=https://你的中转/tw/`：插件会请求 `<中转><推文id>`，
-> 中转把 `api.fxtwitter.com/status/<id>` 的 JSON 原样返回即可（字段不用改）。
+> `api.fxtwitter.com` 会被 Cloudflare 挑战（`cf-mitigated: challenge`，CF Worker 去请求也一样被拦）。
+> 想在国内机器上稳定解析推特，需要在墙外放一个**中转**（Cloudflare Pages 一个 `_worker.js` 就够），
+> 然后填根地址：`FISHPARSER_TW_PROXY=https://你的中转`。
+>
+> 约定：插件请求 `<根>/tw/<推文id>`（短链是 `<根>/tco/<短码>`），中转返回 **fxtwitter 同款 JSON**
+> （`{"code":200,"tweet":{...}}`）即可，字段不用改。现成实现见
+> `04-脚本/网站部署/fishrelay/_worker.js`（上游走推特官方 `cdn.syndication.twimg.com`，带媒体）。
 
 ## 安装
 
@@ -61,7 +64,7 @@ FISHPARSER_PER_MIN=3         # 每个会话每分钟上限，0=不限
 FISHPARSER_BILI_QN=32        # B站清晰度：32=360p 64=720p 80=1080p
 FISHPARSER_YTDLP=true        # 用 yt-dlp 兜底其它站点
 FISHPARSER_TIMEOUT=12        # 请求超时（秒）
-FISHPARSER_TW_PROXY=         # 推特中转前缀（墙外 Worker），留空=直连 fxtwitter
+FISHPARSER_TW_PROXY=         # 推特中转根地址（墙外 Worker），留空=直连 fxtwitter
 ```
 
 ## 为什么省 token

@@ -91,6 +91,11 @@ def main():
     ]:
         ck("twitter_id(%s)" % (u or "空"), F.twitter_id(u) == want, F.twitter_id(u))
 
+    print("③b t.co 短链识别")
+    ck("t.co 短码", F.tco_code("https://t.co/AbCd123") == "AbCd123", F.tco_code("https://t.co/AbCd123"))
+    ck("普通链接不算 t.co", F.tco_code("https://x.com/jack/status/20") == "")
+    ck("t.co 无码返回空", F.tco_code("https://t.co/") == "")
+
     print("④ fxtwitter JSON → 结果（离线）")
     rs = F._tw_from_fx(FX_SAMPLE)
     ck("拿到结果", rs is not None)

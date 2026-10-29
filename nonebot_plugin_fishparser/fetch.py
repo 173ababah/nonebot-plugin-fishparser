@@ -29,6 +29,7 @@ BILI_BV_RE = re.compile(r"(BV[0-9A-Za-z]{10}|av\d{1,20})")
 TW_HOSTS = ("x.com", "twitter.com", "vxtwitter.com", "fxtwitter.com",
             "fixupx.com", "fixvx.com", "twittpr.com")
 TW_ID_RE = re.compile(r"/status(?:es)?/(\d{1,25})")   # 老的推文 id 只有两位（如 /status/20）
+TCO_RE = re.compile(r"t\.co/([0-9A-Za-z]{2,30})")      # 推特自家短链，得跟一次跳转
 # fxtwitter 国内直连（实测腾讯云能通）；vxtwitter 有时被 Cloudflare 拦，做备用
 TW_APIS = ("https://api.fxtwitter.com/status/%s",
            "https://api.vxtwitter.com/i/status/%s")
@@ -344,18 +345,51 @@ def _tw_from_vx(d) -> ParseResult | None:
     )
 
 
+def tco_code(url: str) -> str:
+    """t.co 短链（推特自家）→ 短码。"""
+    if _host(url) != "t.co":
+        return ""
+    m = TCO_RE.search(url or "")
+    return m.group(1) if m else ""
+
+
+async def resolve_tco(url: str, cfg) -> str:
+    """直接跟一次 t.co 的跳转拿推文 id（墙外机器能通；国内走中转，别在这里耗时间）。"""
+    try:
+        async with httpx.AsyncClient(timeout=cfg.fishparser_timeout,
+                                     headers={"User-Agent": UA},
+                                     follow_redirects=True) as c:
+            r = await c.get(url)
+        m = TW_ID_RE.search(str(r.url))
+        return m.group(1) if m else ""
+    except Exception:
+        return ""
+
+
 async def parse_twitter(url: str, cfg) -> ParseResult | None:
     tid = twitter_id(url)
-    if not tid:
+    code = "" if tid else tco_code(url)
+    if not tid and not code:
         return None
+    base = (getattr(cfg, "fishparser_tw_proxy", "") or "").strip().rstrip("/")
+    targets = []
+    if tid:
+        if base:
+            targets.append(base + "/tw/" + tid)
+    elif base:
+        targets.append(base + "/tco/" + code)      # 让中转去跟 t.co 的跳转
+    else:
+        tid = await resolve_tco(url, cfg)          # 没有中转就自己跟
+        if not tid:
+            return None
+    if tid:
+        targets += [api % tid for api in TW_APIS]
+
     headers = {"User-Agent": UA, "Accept": "application/json",
                "Accept-Language": "en-US,en;q=0.9"}
-    # 中转优先（国内服务器直连 fxtwitter 会被 Cloudflare 拦），见 config.fishparser_tw_proxy
-    proxy = (getattr(cfg, "fishparser_tw_proxy", "") or "").strip()
-    urls = ([proxy + tid] if proxy else []) + [api % tid for api in TW_APIS]
     async with httpx.AsyncClient(timeout=cfg.fishparser_timeout, headers=headers,
                                  follow_redirects=True) as c:
-        for u in urls:
+        for u in targets:
             for _ in range(2):          # Cloudflare 的挑战是抽风式的，重试一次
                 d = await _get_json(c, u)
                 rs = _tw_from_fx(d) or _tw_from_vx(d)
@@ -515,7 +549,7 @@ async def parse_link(url: str, cfg) -> ParseResult | None:
             if rs:
                 return rs
 
-    if twitter_id(url):
+    if twitter_id(url) or tco_code(url):
         # 推特专用：直连/中转都取不到时，也回一条「为什么 + 镜像地址」，别只说解析不了
         return await parse_twitter(url, cfg) or tw_unavailable(url)
 
