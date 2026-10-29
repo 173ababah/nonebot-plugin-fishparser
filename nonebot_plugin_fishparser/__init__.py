@@ -9,7 +9,9 @@
 
 站点：
     · B 站（BV号 / av号 / b23.tv 短链）—— 原生接口，不下载、只给直链
-    · 其它站点（抖音 / 小红书 / 快手 / 微博 / 油管 / 推特 / A站 …）—— 装了 yt-dlp 才支持
+    · 推特 / X                —— 原生：api.fxtwitter.com（纯文字推文也认，不用 yt-dlp）
+    · 其它任何网页            —— OG / meta 兜底（标题 + 简介 + 封面）
+    · 抖音 / 小红书 / 快手 / 微博 / 油管 … —— 装了 yt-dlp 能拿直链，没装就走 OG
       `pip install nonebot-plugin-fishparser[ytdlp]`
 """
 from __future__ import annotations
@@ -22,7 +24,7 @@ from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 
 from .config import Config
-from .fetch import ParseResult, parse_link, pick_url
+from .fetch import ParseResult, media_summary, parse_link, pick_url
 
 __plugin_meta__ = PluginMetadata(
     name="鱼式链接解析",
@@ -74,24 +76,39 @@ async def _rule_auto(event: MessageEvent) -> bool:
     return _has_link(event.get_plaintext() or "")
 
 
+def _clip(s: str, n: int) -> str:
+    s = s or ""
+    return s if len(s) <= n else s[:n - 1] + "…"
+
+
 def _fmt(rs: ParseResult) -> str:
     lines = []
     if rs.title:
-        t = rs.title if len(rs.title) <= 46 else rs.title[:45] + "…"
-        lines.append("【%s】" % t)
+        lines.append("【%s】" % _clip(rs.title, 46))
+    if getattr(rs, "body", ""):
+        lines.append(_clip(rs.body, 150))
     meta = []
     if rs.author:
-        meta.append("UP " + (rs.author[:14] if len(rs.author) <= 14 else rs.author[:13] + "…"))
+        meta.append(_clip(rs.author, 22))
     if rs.duration:
         meta.append(rs.duration)
     if rs.site:
         meta.append(rs.site)
+    stats = (rs.extra or {}).get("stats")
+    if stats:
+        meta.append(stats)
     if meta:
         lines.append("  ·  ".join(meta))
+    ms = media_summary((rs.extra or {}).get("medias") or [])
+    if ms:
+        lines.append("媒体：" + ms)
     if rs.media_url:
         lines.append("直链：%s" % rs.media_url)
     elif rs.page_url:
         lines.append(rs.page_url)
+    cover = (rs.extra or {}).get("cover")
+    if cover and cover != rs.media_url:
+        lines.append("封面：%s" % cover)
     if rs.note:
         lines.append(rs.note)
     return "\n".join(lines)
@@ -111,7 +128,11 @@ async def _do_manual(bot: Bot, event: MessageEvent):
         await manual_cmd.finish("别刷，一分钟最多 %d 次。" % plugin_config.fishparser_per_min)
     rs = await parse_link(url, plugin_config)
     if not rs:
-        await manual_cmd.finish("这个链接我解析不了（可能是私密/地区限制/站点还没支持）。")
+        await manual_cmd.finish(
+            "这个链接我解析不了（私密 / 要登录 / 页面里没有可解析的信息）。\n"
+            "稳的：B站、推特（x.com）。\n"
+            "其它的：抖音 / 小红书 / 快手 / 微博 / 油管 —— 服务器装了 yt-dlp 才行，"
+            "没装就只能读到网页标题和封面。")
     await manual_cmd.finish(_fmt(rs))
 
 

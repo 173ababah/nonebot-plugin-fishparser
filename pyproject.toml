@@ -4,8 +4,8 @@ build-backend = "pdm.backend"
 
 [project]
 name = "nonebot-plugin-fishparser"
-version = "0.1.0"
-description = "零 LLM 开销的链接解析：B站/抖音/小红书/油管/推特… 贴链接就出标题+直链"
+version = "0.2.0"
+description = "零 LLM 开销的链接解析：B站 / 推特原生，任意网页 OG 兜底，抖音小红书等可选 yt-dlp"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "173ababah" }]
