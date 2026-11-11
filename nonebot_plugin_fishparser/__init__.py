@@ -114,6 +114,31 @@ def _fmt(rs: ParseResult) -> str:
     return "\n".join(lines)
 
 
+
+def _wallet(event, n: int, why: str = ""):
+    """扣鲸圆券（走主插件 肥鱼人设 的账本）。
+
+    2026-11-02 用户：/解析 每次 -5。主插件没装/没开鲸圆券就返回 off（= 不收费），
+    绝不因为"账本不在"就把功能弄挂。
+    """
+    try:
+        import importlib
+        import sys
+        fish = sys.modules.get("src.肥鱼人设") or importlib.import_module("src.肥鱼人设")
+        return fish.wallet_spend_event(event, int(n), why)
+    except Exception as e:
+        logger.debug("[fishparser] 扣券失败 %r" % (e,))
+        return "off", 0
+
+
+def _wallet_back(event, n: int, why: str = "") -> None:
+    try:
+        import importlib
+        import sys
+        fish = sys.modules.get("src.肥鱼人设") or importlib.import_module("src.肥鱼人设")
+        fish.wallet_refund_event(event, int(n), why)
+    except Exception:
+        pass
 manual_cmd = on_command("解析", aliases={"parse", "链接解析"}, priority=12, block=True)
 
 
@@ -126,8 +151,15 @@ async def _do_manual(bot: Bot, event: MessageEvent):
         await manual_cmd.finish("给我个链接，比如 /解析 https://b23.tv/xxxx")
     if not _rate_ok(event):
         await manual_cmd.finish("别刷，一分钟最多 %d 次。" % plugin_config.fishparser_per_min)
+    # 2026-11-02 用户：/解析 每次 -5 鲸圆券（解析失败退回去）
+    _price = 5
+    _code, _bal = _wallet(event, _price, "/解析")
+    if _code == "poor":
+        await manual_cmd.finish("鲸圆券不够啦……解析一次要 %d 张，你现在 %d 张。" % (_price, _bal))
     rs = await parse_link(url, plugin_config)
     if not rs:
+        if _code == "ok":
+            _wallet_back(event, _price, "/解析失败")
         await manual_cmd.finish(
             "这个链接我解析不了（私密 / 要登录 / 页面里没有可解析的信息）。\n"
             "稳的：B站、推特（x.com）。\n"
